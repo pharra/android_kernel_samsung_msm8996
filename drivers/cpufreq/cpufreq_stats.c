@@ -433,6 +433,7 @@ static void cpufreq_powerstats_create(unsigned int cpu,
 	struct cpufreq_power_stats *powerstats;
 	struct cpufreq_frequency_table *pos;
 	struct device_node *cpu_node;
+	char device_path[16];
 
 	powerstats = kzalloc(sizeof(struct cpufreq_power_stats),
 			GFP_KERNEL);
@@ -456,7 +457,8 @@ static void cpufreq_powerstats_create(unsigned int cpu,
 		powerstats->freq_table[i++] = pos->frequency;
 	powerstats->state_num = i;
 
-	cpu_node = of_get_cpu_node(cpu, NULL);
+	snprintf(device_path, sizeof(device_path), "/cpus/cpu@%d", cpu);
+	cpu_node = of_find_node_by_path(device_path);
 	if (cpu_node) {
 		ret = of_property_read_u32_array(cpu_node, "current",
 				powerstats->curr, count);
@@ -521,6 +523,11 @@ static void cpufreq_allstats_create(unsigned int cpu,
 	unsigned int alloc_size;
 	struct all_cpufreq_stats *all_stat;
 	bool sort_needed = false;
+
+	if (!all_freq_table) {
+		pr_warn("all_freq_table is not initialized\n");
+		return;
+	}
 
 	all_stat = kzalloc(sizeof(struct all_cpufreq_stats),
 			GFP_KERNEL);
@@ -680,16 +687,20 @@ static int __init cpufreq_stats_init(void)
 	if (ret)
 		return ret;
 
+	get_online_cpus();
 	for_each_online_cpu(cpu)
 		cpufreq_stats_create_table(cpu);
+	put_online_cpus();
 
 	ret = cpufreq_register_notifier(&notifier_trans_block,
 				CPUFREQ_TRANSITION_NOTIFIER);
 	if (ret) {
 		cpufreq_unregister_notifier(&notifier_policy_block,
 				CPUFREQ_POLICY_NOTIFIER);
+		get_online_cpus();
 		for_each_online_cpu(cpu)
 			cpufreq_stats_free_table(cpu);
+		put_online_cpus();
 		return ret;
 	}
 

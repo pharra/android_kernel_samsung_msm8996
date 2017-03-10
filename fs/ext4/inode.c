@@ -3038,29 +3038,29 @@ static ssize_t ext4_ext_direct_IO(int rw, struct kiocb *iocb,
 	 * case, we allocate an io_end structure to hook to the iocb.
 	 */
 	iocb->private = NULL;
-	ext4_inode_aio_set(inode, NULL);
-	if (!is_sync_kiocb(iocb)) {
-		io_end = ext4_init_io_end(inode, GFP_NOFS);
-		if (!io_end) {
-			ret = -ENOMEM;
-			goto retake_lock;
-		}
-		/*
-		 * Grab reference for DIO. Will be dropped in ext4_end_io_dio()
-		 */
-		iocb->private = ext4_get_io_end(io_end);
-		/*
-		 * we save the io structure for current async direct
-		 * IO, so that later ext4_map_blocks() could flag the
-		 * io structure whether there is a unwritten extents
-		 * needs to be converted when IO is completed.
-		 */
-		ext4_inode_aio_set(inode, io_end);
-	}
-
 	if (overwrite) {
 		get_block_func = ext4_get_block_write_nolock;
 	} else {
+		ext4_inode_aio_set(inode, NULL);
+		if (!is_sync_kiocb(iocb)) {
+			io_end = ext4_init_io_end(inode, GFP_NOFS);
+			if (!io_end) {
+				ret = -ENOMEM;
+				goto retake_lock;
+			}
+			/*
+			 * Grab reference for DIO. Will be dropped in
+			 * ext4_end_io_dio()
+			 */
+			iocb->private = ext4_get_io_end(io_end);
+			/*
+			 * we save the io structure for current async direct
+			 * IO, so that later ext4_map_blocks() could flag the
+			 * io structure whether there is a unwritten extents
+			 * needs to be converted when IO is completed.
+			 */
+			ext4_inode_aio_set(inode, io_end);
+		}
 		get_block_func = ext4_get_block_write;
 		dio_flags = DIO_LOCKING;
 	}
@@ -4247,14 +4247,14 @@ static int ext4_do_update_inode(handle_t *handle,
  * Fix up interoperability with old kernels. Otherwise, old inodes get
  * re-used with the upper 16 bits of the uid/gid intact
  */
-		if (!ei->i_dtime) {
+		if (ei->i_dtime && list_empty(&ei->i_orphan)) {
+			raw_inode->i_uid_high = 0;
+			raw_inode->i_gid_high = 0;
+		} else {
 			raw_inode->i_uid_high =
 				cpu_to_le16(high_16_bits(i_uid));
 			raw_inode->i_gid_high =
 				cpu_to_le16(high_16_bits(i_gid));
-		} else {
-			raw_inode->i_uid_high = 0;
-			raw_inode->i_gid_high = 0;
 		}
 	} else {
 		raw_inode->i_uid_low = cpu_to_le16(fs_high2lowuid(i_uid));

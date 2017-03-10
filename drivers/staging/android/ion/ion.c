@@ -190,6 +190,7 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	struct sg_table *table;
 	struct scatterlist *sg;
 	int i, ret;
+	int nr_alloc_cur, nr_alloc_peak;
 
 	buffer = kzalloc(sizeof(struct ion_buffer), GFP_KERNEL);
 	if (!buffer)
@@ -265,7 +266,10 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	mutex_lock(&dev->buffer_lock);
 	ion_buffer_add(dev, buffer);
 	mutex_unlock(&dev->buffer_lock);
-	atomic_add(len, &heap->total_allocated);
+	nr_alloc_cur = atomic_add_return(len, &heap->total_allocated);
+	nr_alloc_peak = atomic_read(&heap->total_allocated_peak);
+	if (nr_alloc_cur > nr_alloc_peak)
+		atomic_set(&heap->total_allocated_peak, nr_alloc_cur);
 	return buffer;
 
 err:
@@ -507,9 +511,9 @@ static int ion_handle_add(struct ion_client *client, struct ion_handle *handle)
 	return 0;
 }
 
-struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
-			     size_t align, unsigned int heap_id_mask,
-			     unsigned int flags)
+static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
+		size_t align, unsigned int heap_id_mask,
+		unsigned int flags, bool grab_handle)
 {
 	struct ion_handle *handle;
 	struct ion_device *dev = client->dev;
@@ -604,6 +608,8 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 		return handle;
 
 	mutex_lock(&client->lock);
+	if (grab_handle)
+		ion_handle_get(handle);
 	ret = ion_handle_add(client, handle);
 	mutex_unlock(&client->lock);
 	if (ret) {
@@ -612,6 +618,13 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 	}
 
 	return handle;
+}
+
+struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
+              size_t align, unsigned int heap_id_mask,
+              unsigned int flags)
+{
+	return __ion_alloc(client, len, align, heap_id_mask, flags, false);
 }
 EXPORT_SYMBOL(ion_alloc);
 
@@ -624,7 +637,6 @@ static void ion_free_nolock(struct ion_client *client, struct ion_handle *handle
 	valid_handle = ion_handle_validate(client, handle);
 	if (!valid_handle) {
 		WARN(1, "%s: invalid handle passed to free.\n", __func__);
-		mutex_unlock(&client->lock);
 		return;
 	}
 	ion_handle_put_nolock(handle);
@@ -1202,7 +1214,7 @@ static void ion_vm_open(struct vm_area_struct *vma)
 	mutex_lock(&buffer->lock);
 	list_add(&vma_list->list, &buffer->vmas);
 	mutex_unlock(&buffer->lock);
-	pr_debug("%s: adding %p\n", __func__, vma);
+	pr_debug("%s: adding %pK\n", __func__, vma);
 }
 
 static void ion_vm_close(struct vm_area_struct *vma)
@@ -1217,7 +1229,7 @@ static void ion_vm_close(struct vm_area_struct *vma)
 			continue;
 		list_del(&vma_list->list);
 		kfree(vma_list);
-		pr_debug("%s: deleting %p\n", __func__, vma);
+		pr_debug("%s: deleting %pK\n", __func__, vma);
 		break;
 	}
 	mutex_unlock(&buffer->lock);
@@ -1427,7 +1439,7 @@ struct ion_handle *ion_import_dma_buf(struct ion_client *client, int fd)
 		mutex_unlock(&client->lock);
 		goto end;
 	}
-	
+
 	ret = ion_handle_add(client, handle);
 	mutex_unlock(&client->lock);
 	if (ret) {
@@ -1507,10 +1519,10 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	{
 		struct ion_handle *handle;
 
-		handle = ion_alloc(client, data.allocation.len,
+		handle = __ion_alloc(client, data.allocation.len,
 						data.allocation.align,
 						data.allocation.heap_id_mask,
-						data.allocation.flags);
+						data.allocation.flags, true);
 		if (IS_ERR(handle))
 			return PTR_ERR(handle);
 
@@ -1591,11 +1603,15 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	if (dir & _IOC_READ) {
 		if (copy_to_user((void __user *)arg, &data, _IOC_SIZE(cmd))) {
-			if (cleanup_handle)
+			if (cleanup_handle) {
 				ion_free(client, cleanup_handle);
+				ion_handle_put(cleanup_handle);
+			}
 			return -EFAULT;
 		}
 	}
+	if (cleanup_handle)
+		ion_handle_put(cleanup_handle);
 	return ret;
 }
 
@@ -1804,6 +1820,8 @@ static int ion_debug_heap_show(struct seq_file *s, void *unused)
 	seq_printf(s, "%16.s %16zu\n", "total orphaned",
 		   total_orphaned_size);
 	seq_printf(s, "%16.s %16zu\n", "total ", total_size);
+	seq_printf(s, "%16.s %16u\n", "peak allocated",
+		atomic_read(&heap->total_allocated_peak));
 	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
 		seq_printf(s, "%16.s %16zu\n", "deferred free",
 				heap->free_list_size);

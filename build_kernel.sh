@@ -18,7 +18,7 @@ DTS_DIR=$BUILDING_DIR/arch/arm64/boot/dts/samsung
 ANYKERNEL_DIR=$ROOT_DIR/anykernel-prebuilt
 TEMP_DIR=$OUT_DIR/temp
 
-DEFCONFIG=$1/travis_hero2qlte_chnzc_defconfig
+DEFCONFIG=$1/hero2qlte_chn_open_defconfig
 
 FUNC_PRINT()
 {

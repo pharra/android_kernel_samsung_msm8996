@@ -29,6 +29,11 @@
 #include <linux/of.h>
 #include <trace/events/power.h>
 
+#ifdef CONFIG_CPU_FREQ_LIMIT
+/* cpu frequency table for limit driver */
+void cpufreq_limit_set_table(int cpu, struct cpufreq_frequency_table * ftbl);
+#endif
+
 static DEFINE_MUTEX(l2bw_lock);
 
 static struct clk *cpu_clk[NR_CPUS];
@@ -159,7 +164,7 @@ static int cpufreq_verify_within_freqtable(struct cpufreq_policy *policy)
 	max_bak = policy->max;
 	policy->max = policy->cpuinfo.max_freq;
 	/***********************************************/
-	
+
 	ret_min = cpufreq_frequency_table_target(policy, table,
 				   min_bak,
 				   CPUFREQ_RELATION_L,
@@ -187,12 +192,12 @@ static int cpufreq_verify_within_freqtable(struct cpufreq_policy *policy)
 		ret_max = 1;
 	} else
 		policy->max = max_bak;
-	
+
 	if (policy->min > policy->max) {
 		policy->min = policy->max;
 		ret_min |= 2;
 	}
-	
+
 	if (ret_min > 0)
 		pr_debug("%s: wrong freq. adjust(cpu%d min: %u -> %u)\n",
 			 __func__, policy->cpu, min_bak, policy->min);
@@ -475,6 +480,10 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 
 	ftbl[i].driver_data = i;
 	ftbl[i].frequency = CPUFREQ_TABLE_END;
+
+#ifdef CONFIG_CPU_FREQ_LIMIT
+	cpufreq_limit_set_table(cpu, ftbl);
+#endif
 
 	devm_kfree(dev, data);
 

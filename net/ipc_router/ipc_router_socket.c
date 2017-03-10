@@ -585,6 +585,7 @@ static int msm_ipc_router_close(struct socket *sock)
 	if (!sk)
 		return -EINVAL;
 
+	port_ptr = msm_ipc_sk_port(sk);
 	lock_sock(sk);
 	port_ptr = msm_ipc_sk_port(sk);
 	if (!port_ptr) {

@@ -557,13 +557,14 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	shp->shm_nattch = 0;
 	shp->shm_file = file;
 	shp->shm_creator = current;
-	list_add(&shp->shm_clist, &current->sysvshm.shm_clist);
 
 	id = ipc_addid(&shm_ids(ns), &shp->shm_perm, ns->shm_ctlmni);
 	if (id < 0) {
 		error = id;
 		goto no_id;
 	}
+
+	list_add(&shp->shm_clist, &current->sysvshm.shm_clist);
 
 	/*
 	 * shmid gets reported as "inode#" in /proc/pid/maps.
