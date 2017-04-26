@@ -29,6 +29,11 @@
 #include <linux/of.h>
 #include <trace/events/power.h>
 
+#ifdef CONFIG_CPU_FREQ_LIMIT 
+/* cpu frequency table for limit driver */ 
+void cpufreq_limit_set_table(int cpu, struct cpufreq_frequency_table * ftbl); 
+#endif 
+
 // AP: Default startup frequencies
 #define CONFIG_CPU_FREQ_MIN_CLUSTER1	307200
 #define CONFIG_CPU_FREQ_MAX_CLUSTER1	1593600
