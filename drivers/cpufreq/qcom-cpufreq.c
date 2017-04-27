@@ -34,7 +34,7 @@
 void cpufreq_limit_set_table(int cpu, struct cpufreq_frequency_table * ftbl); 
 #endif 
 
-static unsigned long arg_cpu_max_c1 = 2188800;
+static unsigned long arg_cpu_max_c1 = 1728000;
 
 static int __init cpufreq_read_cpu_max_c1(char *cpu_max_c1)
 {
@@ -51,7 +51,7 @@ static int __init cpufreq_read_cpu_max_c1(char *cpu_max_c1)
 }
 __setup("cpu_max_c1=", cpufreq_read_cpu_max_c1);
 
-static unsigned long arg_cpu_max_c2 = 2342400;
+static unsigned long arg_cpu_max_c2 = 2265600;
 
 static int __init cpufreq_read_cpu_max_c2(char *cpu_max_c2)
 {
